@@ -1,0 +1,163 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    networks:
+      - spanda-network
+    volumes:
+      - mongo_data:/data/db
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    ports:
+      - "9093:9092"
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+    networks:
+      - spanda-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    ports:
+      - "2182:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    networks:
+      - spanda-network
+
+  airbyte-db:
+    image: "postgres:13-alpine"
+    environment:
+      - POSTGRES_USER=airbyte
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=airbyte
+    volumes:
+      - airbyte_db_data:/var/lib/postgresql/data
+
+  #airbyte-init:
+  #  image: "airbyte/bootloader:0.40.22-alpha"  # Use latest available version
+  #  depends_on:
+  #    - airbyte-db
+  #  environment:
+  #    - DB_USER=airbyte
+  #    - DB_PASSWORD=password
+  #    - DB_URL=jdbc:postgresql://airbyte-db:5432/airbyte
+  #    - AIRBYTE_VERSION=0.40.22-alpha  # Use the latest version
+  #  volumes:
+  #    - airbyte_data:/data
+  #  command: ["--airbyte", "--init"]
+#
+#  airbyte-scheduler:
+#    image: "airbyte/scheduler:0.40.22-alpha"  # Use the latest version
+#    depends_on:
+#      - airbyte-db
+#    environment:
+#      - DB_USER=airbyte
+#      - DB_PASSWORD=password
+#      - DB_URL=jdbc:postgresql://airbyte-db:5432/airbyte
+#      - AIRBYTE_VERSION=0.40.22-alpha
+#    volumes:
+#      - airbyte_data:/data
+#    ports:
+#      - "8001:8001"
+#
+#  airbyte-server:
+#    image: "airbyte/server:0.40.22-alpha"  # Use the latest version
+#    depends_on:
+#      - airbyte-db
+#      - airbyte-scheduler
+#    environment:
+#      - DB_USER=airbyte
+#      - DB_PASSWORD=password
+#      - DB_URL=jdbc:postgresql://airbyte-db:5432/airbyte
+#      - AIRBYTE_VERSION=0.40.22-alpha
+#    ports:
+#      - "8001:8001"
+#    volumes:
+#      - airbyte_data:/data
+#
+#  airbyte-webapp:
+#    image: "airbyte/webapp:0.40.22-alpha"  # Use the latest version
+#    depends_on:
+#      - airbyte-server
+#    environment:
+#      - AIRBYTE_VERSION=0.40.22-alpha
+#      - REACT_APP_API_URL=http://airbyte-server:8001/api/v1/
+#    ports:
+#      - "8000:80"
+#
+  weaviate:
+    image: semitechnologies/weaviate:latest
+    ports:
+      - "8080:8080"
+    networks:
+      - spanda-network
+    environment:
+      - QUERY_DEFAULTS_LIMIT=20
+      - AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
+      - PERSISTENCE_DATA_PATH=/var/lib/weaviate
+      - ENABLE_MODULES=text2vec-transformers
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+
+  bytewax:
+    build: ./streaming
+    networks:
+      - spanda-network
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.16.0
+    ports:
+      - "5000:5000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://localhost:5000
+    networks:
+      - spanda-network
+    volumes:
+      - mlflow_data:/mlflow
+
+  training:
+    build: ./training
+    networks:
+      - spanda-network
+
+  inference:
+    build: ./inference
+    ports:
+      - "8001:8001"
+    networks:
+      - spanda-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - spanda-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3001"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - spanda-network
+
+networks:
+  spanda-network:
+
+volumes:
+  mongo_data:
+  weaviate_data:
+  grafana_data:
+  mlflow_data:
+  airbyte_data:
+  airbyte_db_data:
+
