@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  # Frontend Service (spanda-frontend)
+  frontend:
+    build: ../spanda-frontend
+    ports:
+      - "3000:3000"
+    networks:
+      - spanda-network
+
+  # MongoDB for storing data collected from ETL pipelines
+  mongodb:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    networks:
+      - spanda-network
+    volumes:
+      - mongo_data:/data/db
+
+  # Kafka for managing data streaming
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+    networks:
+      - spanda-network
+
+  # Zookeeper for Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    networks:
+      - spanda-network
+
+  # Weaviate for vector database
+  weaviate:
+    image: semitechnologies/weaviate:latest
+    ports:
+      - "8080:8080"
+    networks:
+      - spanda-network
+    environment:
+      - QUERY_DEFAULTS_LIMIT=20
+      - AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
+      - PERSISTENCE_DATA_PATH=/var/lib/weaviate
+      - DEFAULT_VECTORIZER_MODULE=text2vec-transformers
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+
+  # Bytewax for streaming pipeline
+  bytewax:
+    build: ./goldenverba/streaming
+    networks:
+      - spanda-network
+
+  # MLflow for tracking model training and experiment results
+  mlflow:
+    image: mlflow/mlflow:latest
+    ports:
+      - "5000:5000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://localhost:5000
+    networks:
+      - spanda-network
+    volumes:
+      - mlflow_data:/mlflow
+
+  # Training service using Hugging Face Transformers
+  training:
+    build: ./goldenverba/training
+    networks:
+      - spanda-network
+
+  # Inference service using FastAPI
+  inference:
+    build: ./goldenverba/inference
+    ports:
+      - "8001:8001"
+    networks:
+      - spanda-network
+
+  # Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./goldenverba/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - spanda-network
+
+  # Grafana for monitoring dashboards
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3001"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - spanda-network
+
+networks:
+  spanda-network:
+
+volumes:
+  mongo_data:
+  weaviate_data:
+  grafana_data:
+  mlflow_data:
